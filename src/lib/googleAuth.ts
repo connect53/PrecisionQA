@@ -1,5 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  User,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile as firebaseUpdateProfile
+} from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -59,6 +69,27 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   }
 };
 
+export const firebaseSignUp = async (email: string, password: string, displayName: string): Promise<User> => {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  if (result.user) {
+    try {
+      await firebaseUpdateProfile(result.user, { displayName });
+    } catch (profileErr) {
+      console.warn("Failed to update Firebase profile displayName:", profileErr);
+    }
+  }
+  return result.user;
+};
+
+export const firebaseSignIn = async (email: string, password: string): Promise<User> => {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+};
+
+export const firebaseResetPassword = async (email: string): Promise<void> => {
+  await sendPasswordResetEmail(auth, email);
+};
+
 export const getAccessToken = async (): Promise<string | null> => {
   if (!cachedAccessToken && typeof window !== 'undefined') {
     cachedAccessToken = localStorage.getItem("google_oauth_access_token");
@@ -73,3 +104,4 @@ export const logout = async () => {
     localStorage.removeItem("google_oauth_access_token");
   }
 };
+

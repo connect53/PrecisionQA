@@ -1,6 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { User, UserRole, AuthSession } from "../types";
-import { googleSignIn as firebaseGoogleSignIn } from "./googleAuth";
+import { 
+  googleSignIn as firebaseGoogleSignIn,
+  firebaseSignIn,
+  firebaseSignUp,
+  firebaseResetPassword
+} from "./googleAuth";
 
 // Check if credentials exist
 const metaEnv = (import.meta as any).env || {};
@@ -275,13 +280,66 @@ export const authService = {
         return simUser;
       }
     } else {
-      const simUser = await this.executeSimulatedLogin(normalizedEmail, password, rememberMe);
+      // Real Firebase Auth Integration for client-side deployments (Netlify, etc.)
       try {
-        return await this.syncProfile(simUser);
-      } catch (syncErr) {
-        console.warn("Database profile sync failed after simulated login:", syncErr);
+        console.log("Attempting real authentication via Firebase Auth...");
+        const fbUser = await firebaseSignIn(normalizedEmail, password);
+        
+        // Check if there is a simulated user profile details in localStorage to retain roles/details
+        const users = getSimulatedUsers();
+        const matched = users.find(u => u.email.toLowerCase() === normalizedEmail);
+
+        const user: User = {
+          id: matched?.id || fbUser.uid,
+          email: normalizedEmail,
+          name: matched?.name || fbUser.displayName || normalizedEmail.split("@")[0],
+          role: (matched?.role as UserRole) || UserRole.QA_AUDITOR,
+          employeeId: matched?.employeeId || "EMP-" + fbUser.uid.substring(0, 5).toUpperCase(),
+          team: matched?.team || "Tier 1 Support Team A",
+          lob: matched?.lob || "Customer Experience",
+          status: matched?.status || "active",
+          lastLogin: new Date().toISOString(),
+          createdAt: matched?.createdAt || new Date().toISOString(),
+          avatarUrl: fbUser.photoURL || matched?.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || normalizedEmail)}`
+        };
+
+        const expiresAt = rememberMe 
+          ? Date.now() + 30 * 24 * 60 * 60 * 1000 
+          : Date.now() + 12 * 60 * 60 * 1000;
+
+        this.saveSession({
+          user,
+          token: "firebase-jwt-token-" + fbUser.uid.substring(0, 8),
+          expiresAt,
+          rememberMe
+        });
+
+        try {
+          await this.syncProfile(user);
+        } catch (syncErr) {
+          console.warn("Database profile sync failed after Firebase login:", syncErr);
+        }
+
+        return user;
+      } catch (fbErr: any) {
+        console.warn("Firebase Auth login failed. Checking simulated local storage fallback...", fbErr);
+        
+        // If they already exist in simulation, fallback to simulated login (helpful for offline/dev)
+        const users = getSimulatedUsers();
+        const existsInSimulation = users.some(u => u.email.toLowerCase() === normalizedEmail);
+        if (existsInSimulation) {
+          const simUser = await this.executeSimulatedLogin(normalizedEmail, password, rememberMe);
+          try {
+            return await this.syncProfile(simUser);
+          } catch (syncErr) {
+            console.warn("Database profile sync failed after simulated login:", syncErr);
+          }
+          return simUser;
+        }
+        
+        // Otherwise, throw the real Firebase error so the user gets accurate feedback
+        throw new Error(fbErr.message || fbErr || "Incorrect credentials. Verification failed.");
       }
-      return simUser;
     }
   },
 
@@ -348,7 +406,64 @@ export const authService = {
         throw err;
       }
     } else {
-      user = await this.executeSimulatedSignUp(normalizedEmail, name, role, rememberMe, password);
+      // Real Firebase Auth Integration for client-side deployments (Netlify, etc.)
+      try {
+        console.log("Attempting real registration via Firebase Auth...");
+        const fbUser = await firebaseSignUp(normalizedEmail, password, name);
+        
+        // Also seed into local simulated users array so they show up in operational dashboards
+        const newSimUser = {
+          id: fbUser.uid,
+          email: normalizedEmail,
+          password: password,
+          name,
+          role,
+          employeeId: "EMP-" + Math.floor(10000 + Math.random() * 90000).toString(),
+          team: "Tier 1 Support Team A",
+          lob: "Customer Experience",
+          status: "active" as const,
+          lastLogin: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
+        };
+        
+        const users = getSimulatedUsers();
+        if (!users.some(u => u.email.toLowerCase() === normalizedEmail)) {
+          users.push(newSimUser);
+          localStorage.setItem("precisionqa_simulated_users", JSON.stringify(users));
+        }
+
+        user = {
+          id: fbUser.uid,
+          email: normalizedEmail,
+          name,
+          role,
+          status: "active",
+          createdAt: new Date().toISOString(),
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
+        };
+
+        const expiresAt = rememberMe 
+          ? Date.now() + 30 * 24 * 60 * 60 * 1000 
+          : Date.now() + 12 * 60 * 60 * 1000;
+
+        this.saveSession({
+          user,
+          token: "firebase-jwt-token-" + fbUser.uid.substring(0, 8),
+          expiresAt,
+          rememberMe
+        });
+      } catch (fbErr: any) {
+        console.warn("Firebase Auth signup failed. Falling back to local simulation in development only...", fbErr);
+        
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('run.app');
+        if (isLocal) {
+          user = await this.executeSimulatedSignUp(normalizedEmail, name, role, rememberMe, password);
+        } else {
+          // If we're on a deployed netlify url, we should throw the real signup error!
+          throw new Error(fbErr.message || fbErr || "Registration failed. Please make sure your password is at least 6 characters long.");
+        }
+      }
     }
 
     // Sync to database
@@ -406,7 +521,7 @@ export const authService = {
 
   // Google SSO login
   async signInWithGoogle(rememberMe: boolean = false): Promise<User> {
-    // 1. Try Firebase Google Sign-In first as it is pre-configured with client-applet credentials
+    // Try Firebase Google Sign-In first as it is pre-configured with client-applet credentials
     try {
       console.log("Attempting Google Sign-In via Firebase Auth...");
       const fbResult = await firebaseGoogleSignIn();
@@ -448,10 +563,23 @@ export const authService = {
         return user;
       }
     } catch (fbErr: any) {
-      console.warn("Firebase Google Auth failed or canceled. Trying Supabase/Simulation fallback path...", fbErr);
+      console.warn("Firebase Google Auth failed or canceled:", fbErr);
+      
+      const errorCode = fbErr.code || "";
+      let helperMessage = "";
+      
+      if (errorCode === "auth/unauthorized-domain") {
+        helperMessage = " This domain is not authorized in Firebase. Please add your Netlify domain (e.g. 'xxx.netlify.app') to the 'Authorized Domains' list under 'Authentication > Settings' in the Firebase Auth Console.";
+      } else if (errorCode === "auth/popup-closed-by-user") {
+        helperMessage = " The login popup was closed before completing the sign-in. Please try again.";
+      } else if (errorCode === "auth/cancelled-popup-request") {
+        helperMessage = " Multiple popup login operations were triggered simultaneously.";
+      }
+
+      throw new Error(`Google Sign-In failed: ${fbErr.message || fbErr}.${helperMessage}`);
     }
 
-    // 2. Fallback to Supabase OAuth if available
+    // Try Supabase OAuth as secondary if configured
     if (isRealSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -461,11 +589,6 @@ export const authService = {
           }
         });
         if (error) {
-          // If the provider isn't enabled, intercept and trigger simulated fallback
-          if (error.message && (error.message.includes("provider is not enabled") || error.message.includes("Unsupported provider"))) {
-            console.warn("Supabase Google OAuth provider is not enabled. Falling back to local Google SSO simulation.");
-            return this.executeSimulatedGoogleSignIn(rememberMe);
-          }
           throw new Error(error.message);
         }
         return {
@@ -477,15 +600,17 @@ export const authService = {
           createdAt: new Date().toISOString()
         };
       } catch (err: any) {
-        if (err.message && (err.message.includes("provider is not enabled") || err.message.includes("Unsupported provider"))) {
-          console.warn("Supabase Google OAuth is not configured/enabled. Falling back to local SSO simulation.", err);
-          return this.executeSimulatedGoogleSignIn(rememberMe);
-        }
-        throw err;
+        throw new Error(`Supabase OAuth Sign-In failed: ${err.message || err}`);
       }
     } else {
-      // 3. Fallback to Simulated SSO Flow
-      return this.executeSimulatedGoogleSignIn(rememberMe);
+      // In development or local environments, we can fallback to simulated SSO if they are not using Firebase
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('run.app');
+      if (isLocal) {
+        console.warn("Falling back to local simulated SSO as Firebase/Supabase was not successfully initialized.");
+        return this.executeSimulatedGoogleSignIn(rememberMe);
+      } else {
+        throw new Error("Google Sign-In is not configured. Please complete your Firebase or Supabase OAuth setup.");
+      }
     }
   },
 
