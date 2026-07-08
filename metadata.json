@@ -1,5 +1,5 @@
 {
-  "name": "PrecisionQA Management System",
+  "name": "PrecisionQA",
   "description": "An operational enterprise-grade Quality Assurance Management System for QA Managers, Auditors, and Agents on Precision360.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

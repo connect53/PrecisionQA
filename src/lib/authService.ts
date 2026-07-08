@@ -1,10 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { User, UserRole, AuthSession } from "../types";
 import { 
-  googleSignIn as firebaseGoogleSignIn,
-  firebaseSignIn,
-  firebaseSignUp,
-  firebaseResetPassword
+  googleSignIn as firebaseGoogleSignIn // Still needed for some internal fallback perhaps? I'll leave it but remove the others.
 } from "./googleAuth";
 
 // Check if credentials exist
@@ -520,96 +517,32 @@ export const authService = {
   },
 
   // Google SSO login
-  async signInWithGoogle(rememberMe: boolean = false): Promise<User> {
-    // Try Firebase Google Sign-In first as it is pre-configured with client-applet credentials
-    try {
-      console.log("Attempting Google Sign-In via Firebase Auth...");
-      const fbResult = await firebaseGoogleSignIn();
-      if (fbResult && fbResult.user) {
-        const { user: fbUser } = fbResult;
-        const email = fbUser.email || "sso-employee@precisionqa.com";
-        const name = fbUser.displayName || email.split("@")[0];
-        
-        // Match with pre-seeded demo users if possible for full database access compatibility
-        const users = getSimulatedUsers();
-        const matched = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-        
-        const user: User = {
-          id: matched?.id || fbUser.uid,
-          email: email,
-          name: name,
-          role: matched?.role || UserRole.AGENT,
-          employeeId: matched?.employeeId || "EMP-" + fbUser.uid.substring(0, 5).toUpperCase(),
-          team: matched?.team || "Tier 1 Support Team A",
-          lob: matched?.lob || "Customer Experience",
-          status: matched?.status || "active",
-          lastLogin: new Date().toISOString(),
-          createdAt: matched?.createdAt || fbUser.metadata.creationTime || new Date().toISOString(),
-          avatarUrl: fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
-        };
-
-        const expiresAt = rememberMe 
-          ? Date.now() + 30 * 24 * 60 * 60 * 1000 
-          : Date.now() + 12 * 60 * 60 * 1000;
-
-        this.saveSession({
-          user,
-          token: fbResult.accessToken || "firebase-sso-token",
-          expiresAt,
-          rememberMe
-        });
-
-        console.log("Firebase Google Auth success. Logged in as:", user.name);
-        return user;
-      }
-    } catch (fbErr: any) {
-      console.warn("Firebase Google Auth failed or canceled:", fbErr);
-      
-      const errorCode = fbErr.code || "";
-      let helperMessage = "";
-      
-      if (errorCode === "auth/unauthorized-domain") {
-        helperMessage = " This domain is not authorized in Firebase. Please add your Netlify domain (e.g. 'xxx.netlify.app') to the 'Authorized Domains' list under 'Authentication > Settings' in the Firebase Auth Console.";
-      } else if (errorCode === "auth/popup-closed-by-user") {
-        helperMessage = " The login popup was closed before completing the sign-in. Please try again.";
-      } else if (errorCode === "auth/cancelled-popup-request") {
-        helperMessage = " Multiple popup login operations were triggered simultaneously.";
-      }
-
-      throw new Error(`Google Sign-In failed: ${fbErr.message || fbErr}.${helperMessage}`);
-    }
-
-    // Try Supabase OAuth as secondary if configured
+  async signInWithGoogle(rememberMe: boolean = false): Promise<void> {
     if (isRealSupabaseConfigured && supabase) {
       try {
+        console.log("Attempting Google Sign-In via Supabase OAuth...");
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: window.location.origin
+            redirectTo: 'https://precisionqa.netlify.app' // User's deployed domain
           }
         });
         if (error) {
           throw new Error(error.message);
         }
-        return {
-          id: "google-sso-placeholder",
-          email: "sso-employee@precisionqa.com",
-          name: "Google Authenticated User",
-          role: UserRole.AGENT,
-          status: "active",
-          createdAt: new Date().toISOString()
-        };
+        // signInWithOAuth redirects the page; we don't return a User object here.
       } catch (err: any) {
-        throw new Error(`Supabase OAuth Sign-In failed: ${err.message || err}`);
+        console.error("Supabase Google OAuth Sign-In failed:", err);
+        throw new Error(`Google Sign-In failed: ${err.message || err}`);
       }
     } else {
-      // In development or local environments, we can fallback to simulated SSO if they are not using Firebase
+      // In development or local environments, fallback to simulated SSO
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('run.app');
       if (isLocal) {
-        console.warn("Falling back to local simulated SSO as Firebase/Supabase was not successfully initialized.");
-        return this.executeSimulatedGoogleSignIn(rememberMe);
+        console.warn("Falling back to local simulated SSO as Supabase was not successfully initialized.");
+        await this.executeSimulatedGoogleSignIn(rememberMe);
       } else {
-        throw new Error("Google Sign-In is not configured. Please complete your Firebase or Supabase OAuth setup.");
+        throw new Error("Google Sign-In is not configured. Please complete your Supabase OAuth setup.");
       }
     }
   },
