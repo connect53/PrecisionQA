@@ -90,6 +90,7 @@ export default function UserWidget({ user, onLogout, addToast, onProfileClick }:
           <img 
             src={user.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.name)}`}
             alt={user.name}
+            loading="lazy"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
           />
@@ -113,6 +114,7 @@ export default function UserWidget({ user, onLogout, addToast, onProfileClick }:
               <img 
                 src={user.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.name)}`}
                 alt={user.name}
+                loading="lazy"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
               />

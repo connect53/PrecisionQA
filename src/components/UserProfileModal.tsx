@@ -156,7 +156,13 @@ export default function UserProfileModal({ user, onClose, onUpdate, addToast }: 
               <div className="flex items-center gap-4 bg-blue-50/25 border border-blue-100/50 p-4 rounded-xl">
                 <div className="w-14 h-14 rounded-full bg-blue-600 border border-blue-300 text-white flex items-center justify-center font-extrabold text-lg shadow-sm overflow-hidden flex-shrink-0">
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+                    <img 
+                      src={avatarUrl} 
+                      alt={name} 
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover" 
+                    />
                   ) : (
                     getInitials(name)
                   )}

@@ -195,14 +195,18 @@ export default function LoginPage({ onSuccess, addToast }: LoginPageProps) {
     setLoading(true);
     try {
       const user = await authService.signInWithGoogle(rememberMe);
-      addToast(
-        "success", 
-        "Welcome Back!", 
-        `Authenticated via Google SSO as ${user.name} (${user.role.toUpperCase()}). Redirecting...`
-      );
-      setTimeout(() => {
-        onSuccess();
-      }, 500);
+      if (user) {
+        addToast(
+          "success", 
+          "Welcome Back!", 
+          `Authenticated via Google SSO as ${user.name} (${user.role.toUpperCase()}). Redirecting...`
+        );
+        setTimeout(() => {
+          onSuccess();
+        }, 500);
+      } else {
+        addToast("info", "Redirecting", "Redirecting to Google Secure Sign-In portal...");
+      }
     } catch (err: any) {
       console.error(err);
       addToast("error", "Google Sign-In Failed", getFriendlyErrorMessage(err, "Google OAuth validation failed."));

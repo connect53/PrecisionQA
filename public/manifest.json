@@ -1,0 +1,22 @@
+{
+  "short_name": "PrecisionQA",
+  "name": "PrecisionQA Enterprise Quality Management",
+  "description": "Enterprise Grade QA and Audit Management Platform",
+  "icons": [
+    {
+      "src": "/src/assets/images/precisionqa_logo_1783486452100.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/src/assets/images/precisionqa_logo_1783486452100.jpg",
+      "type": "image/jpeg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/dashboard",
+  "background_color": "#000000",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait"
+}
