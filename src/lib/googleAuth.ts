@@ -9,7 +9,7 @@ export const initAuth = (
   onAuthFailure?: () => void
 ) => {
   // Listen for Supabase auth state changes
-  return supabase?.auth.onAuthStateChange((event, session) => {
+  const { data } = supabase?.auth.onAuthStateChange((event, session) => {
     if (session && session.user) {
       const user: User = {
         id: session.user.id,
@@ -27,7 +27,9 @@ export const initAuth = (
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }
-  });
+  }) || { data: { subscription: { unsubscribe: () => {} } } };
+  
+  return data.subscription.unsubscribe;
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
