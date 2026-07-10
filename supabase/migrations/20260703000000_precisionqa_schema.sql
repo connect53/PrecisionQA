@@ -462,3 +462,44 @@ CREATE POLICY policy_logs_select ON public.activity_logs
 
 CREATE POLICY policy_logs_insert ON public.activity_logs
     FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+-- 9. Administrative & Master Data Policies (Allow read to all authenticated, modification to Admins/QA Managers)
+CREATE POLICY policy_roles_select ON public.roles
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_roles_modify ON public.roles
+    FOR ALL USING (get_current_user_role() IN ('admin', 'super_admin'));
+
+CREATE POLICY policy_permissions_select ON public.permissions
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_permissions_modify ON public.permissions
+    FOR ALL USING (get_current_user_role() IN ('admin', 'super_admin'));
+
+CREATE POLICY policy_role_permissions_select ON public.role_permissions
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_role_permissions_modify ON public.role_permissions
+    FOR ALL USING (get_current_user_role() IN ('admin', 'super_admin'));
+
+CREATE POLICY policy_clients_select ON public.clients
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_clients_modify ON public.clients
+    FOR ALL USING (get_current_user_role() IN ('admin', 'qa_manager', 'super_admin'));
+
+CREATE POLICY policy_lobs_select ON public.lobs
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_lobs_modify ON public.lobs
+    FOR ALL USING (get_current_user_role() IN ('admin', 'qa_manager', 'super_admin'));
+
+CREATE POLICY policy_teams_select ON public.teams
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_teams_modify ON public.teams
+    FOR ALL USING (get_current_user_role() IN ('admin', 'qa_manager', 'super_admin'));
+
+CREATE POLICY policy_team_members_select ON public.team_members
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_team_members_modify ON public.team_members
+    FOR ALL USING (get_current_user_role() IN ('admin', 'qa_manager', 'super_admin'));
+
+CREATE POLICY policy_settings_select ON public.settings
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY policy_settings_modify ON public.settings
+    FOR ALL USING (get_current_user_role() IN ('admin', 'qa_manager', 'super_admin'));

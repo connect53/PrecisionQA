@@ -2,6 +2,10 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { initializeApiProxy } from './lib/apiProxy.ts';
+
+// Initialize the transparent administrative API database proxy / interceptor
+initializeApiProxy();
 
 // Register Service Worker for PWA capabilities in production
 if ('serviceWorker' in navigator && (import.meta as any).env?.PROD) {
